@@ -33,4 +33,34 @@ describe("renderReviewHunkPreview", () => {
 		expect(preview).toContain("12");
 		expect(preview.split("\n").length).toBeGreaterThan(3);
 	});
+
+	it("handles asymmetric word-diff ranges gracefully (ref(L) → ref))", async () => {
+		// When diffWords treats trailing ')' as "common" and leaves the new side
+		// with no ranges, the renderer should fall back to syntax-highlighted diff
+		// instead of applying one-sided word-level highlights.
+		const preview = await renderReviewHunkPreview({
+			filePath: "src/example.ts",
+			width: 72,
+			hunk: {
+				id: "src/example.ts:5:5",
+				oldStart: 5,
+				oldLines: 1,
+				newStart: 5,
+				newLines: 1,
+				header: "@@ -5,1 +5,1 @@",
+				lines: [
+					{ type: "del", oldNum: 5, newNum: null, content: "ref(L)" },
+					{ type: "add", oldNum: null, newNum: 5, content: "ref)" },
+				],
+			},
+		});
+
+		// Both lines should be present
+		expect(preview).toContain("ref(L)");
+		expect(preview).toContain("ref)");
+		// Should render both as separate diff lines (no crash, no missing content)
+		const lines = preview.split("\n");
+		const contentLines = lines.filter((l) => l.includes("ref"));
+		expect(contentLines.length).toBe(2);
+	});
 });

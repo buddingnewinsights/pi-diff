@@ -746,7 +746,11 @@ function injectBg(ansiLine: string, ranges: Array<[number, number]>, baseBg: str
 			if (end !== -1) {
 				const sequence = ansiLine.slice(index, end + 1);
 				output += sequence;
-				if (sequence === "\x1b[0m") output += inHighlight ? highlightBg : baseBg;
+				// Re-inject bg after any reset-like sequence (Shiki uses \x1b[39m
+				// between tokens; some terminals may treat it as a broader reset).
+				if (sequence === "\x1b[0m" || sequence === "\x1b[39m" || sequence === "\x1b[49m") {
+					output += inHighlight ? highlightBg : baseBg;
+				}
 				index = end + 1;
 				continue;
 			}
@@ -870,14 +874,15 @@ export async function renderUnified(
 
 		const isPaired = deletions.length === 1 && additions.length === 1;
 		const wordDiff = isPaired ? wordDiffAnalysis(deletions[0].line.content, additions[0].line.content) : null;
-		if (isPaired && wordDiff && wordDiff.similarity >= WORD_DIFF_MIN_SIM && canHighlight) {
+		const wordDiffBalanced = wordDiff && wordDiff.oldRanges.length > 0 && wordDiff.newRanges.length > 0;
+		if (isPaired && wordDiffBalanced && wordDiff.similarity >= WORD_DIFF_MIN_SIM && canHighlight) {
 			const deletionBody = injectBg(deletions[0].hl, wordDiff.oldRanges, BG_DEL, BG_DEL_W);
 			const additionBody = injectBg(additions[0].hl, wordDiff.newRanges, BG_ADD, BG_ADD_W);
 			emitRow(deletions[0].line.oldNum, "-", BG_GUTTER_DEL, `${colors.fgDel}${BOLD}`, deletionBody, BG_DEL);
 			emitRow(additions[0].line.newNum, "+", BG_GUTTER_ADD, `${colors.fgAdd}${BOLD}`, additionBody, BG_ADD);
 			continue;
 		}
-		if (isPaired && wordDiff && wordDiff.similarity >= WORD_DIFF_MIN_SIM && !canHighlight) {
+		if (isPaired && wordDiffBalanced && wordDiff.similarity >= WORD_DIFF_MIN_SIM && !canHighlight) {
 			const plain = plainWordDiff(deletions[0].line.content, additions[0].line.content);
 			emitRow(deletions[0].line.oldNum, "-", BG_GUTTER_DEL, `${colors.fgDel}${BOLD}`, `${BG_DEL}${plain.old}`, BG_DEL);
 			emitRow(additions[0].line.newNum, "+", BG_GUTTER_ADD, `${colors.fgAdd}${BOLD}`, `${BG_ADD}${plain.new}`, BG_ADD);
@@ -1002,19 +1007,21 @@ export async function renderSplit(
 		const isPairedChange = row.left?.type === "del" && row.right?.type === "add";
 		const wordDiff =
 			isPairedChange && row.left && row.right ? wordDiffAnalysis(row.left.content, row.right.content) : null;
+		const wordDiffBalanced =
+			wordDiff && wordDiff.oldRanges.length > 0 && wordDiff.newRanges.length > 0;
 		const leftHighlight = row.left && row.left.type !== "sep" ? (leftHighlights[leftIndex++] ?? row.left.content) : "";
 		const rightHighlight =
 			row.right && row.right.type !== "sep" ? (rightHighlights[rightIndex++] ?? row.right.content) : "";
 		const leftHalf = buildHalf(
 			row.left,
 			leftHighlight,
-			isPairedChange && wordDiff && wordDiff.similarity >= WORD_DIFF_MIN_SIM ? wordDiff.oldRanges : null,
+			isPairedChange && wordDiffBalanced && wordDiff.similarity >= WORD_DIFF_MIN_SIM ? wordDiff.oldRanges : null,
 			"left",
 		);
 		const rightHalf = buildHalf(
 			row.right,
 			rightHighlight,
-			isPairedChange && wordDiff && wordDiff.similarity >= WORD_DIFF_MIN_SIM ? wordDiff.newRanges : null,
+			isPairedChange && wordDiffBalanced && wordDiff.similarity >= WORD_DIFF_MIN_SIM ? wordDiff.newRanges : null,
 			"right",
 		);
 		const maxRows = Math.max(leftHalf.bodyRows.length, rightHalf.bodyRows.length);

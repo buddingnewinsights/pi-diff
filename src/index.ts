@@ -950,8 +950,13 @@ function injectBg(ansiLine: string, ranges: Array<[number, number]>, baseBg: str
 			if (m !== -1) {
 				const seq = ansiLine.slice(i, m + 1);
 				out += seq;
-				// Re-inject bg after full reset
-				if (seq === "\x1b[0m") out += inHL ? hlBg : baseBg;
+				// Re-inject bg after any reset-like sequence.
+				// Shiki uses \x1b[39m (fg reset) between tokens — technically this
+				// doesn't clear background per ANSI spec, but some terminal
+				// emulators may treat it as a broader reset.
+				if (seq === "\x1b[0m" || seq === "\x1b[39m" || seq === "\x1b[49m") {
+					out += inHL ? hlBg : baseBg;
+				}
 				i = m + 1;
 				continue;
 			}
@@ -1092,14 +1097,20 @@ async function renderUnified(
 		const isPaired = dels.length === 1 && adds.length === 1;
 		const wd = isPaired ? wordDiffAnalysis(dels[0].l.content, adds[0].l.content) : null;
 
-		if (isPaired && wd && wd.similarity >= WORD_DIFF_MIN_SIM && canHL) {
+		// Word-diff emphasis — only use when BOTH sides have ranges.
+		// When diffWords treats trailing punctuation as "common" while removing
+		// adjacent chars, only one side gets word highlights, creating a confusing
+		// visual ("off by 1" perception). Skip word-level in that case.
+		const wdBalanced = wd && wd.oldRanges.length > 0 && wd.newRanges.length > 0;
+
+		if (isPaired && wdBalanced && wd.similarity >= WORD_DIFF_MIN_SIM && canHL) {
 			const delBody = injectBg(dels[0].hl, wd.oldRanges, BG_DEL, BG_DEL_W);
 			const addBody = injectBg(adds[0].hl, wd.newRanges, BG_ADD, BG_ADD_W);
 			emitRow(dels[0].l.oldNum, "-", BG_GUTTER_DEL, `${dc.fgDel}${BOLD}`, delBody, BG_DEL);
 			emitRow(adds[0].l.newNum, "+", BG_GUTTER_ADD, `${dc.fgAdd}${BOLD}`, addBody, BG_ADD);
 			continue;
 		}
-		if (isPaired && wd && wd.similarity >= WORD_DIFF_MIN_SIM && !canHL) {
+		if (isPaired && wdBalanced && wd.similarity >= WORD_DIFF_MIN_SIM && !canHL) {
 			const pwd = plainWordDiff(dels[0].l.content, adds[0].l.content);
 			emitRow(dels[0].l.oldNum, "-", BG_GUTTER_DEL, `${dc.fgDel}${BOLD}`, `${BG_DEL}${pwd.old}`, BG_DEL);
 			emitRow(adds[0].l.newNum, "+", BG_GUTTER_ADD, `${dc.fgAdd}${BOLD}`, `${BG_ADD}${pwd.new}`, BG_ADD);
