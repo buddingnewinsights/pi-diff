@@ -1,6 +1,6 @@
 {
 	"name": "@heyhuynhgiabuu/pi-diff",
-	"version": "0.4.1",
+	"version": "0.5.0",
 	"description": "Shiki-powered terminal diff renderer for pi — syntax-highlighted, word-level diffs in split and unified views.",
 	"author": "huynhgiabuu",
 	"license": "MIT",
@@ -41,6 +41,10 @@
 		"dist/review/command.d.ts.map",
 		"dist/review/command.js",
 		"dist/review/command.js.map",
+		"dist/review/hunk-bridge.d.ts",
+		"dist/review/hunk-bridge.d.ts.map",
+		"dist/review/hunk-bridge.js",
+		"dist/review/hunk-bridge.js.map",
 		"dist/review/export.d.ts",
 		"dist/review/export.d.ts.map",
 		"dist/review/export.js",
@@ -91,6 +95,11 @@
 		"@earendil-works/pi-tui": "*",
 		"@mariozechner/pi-coding-agent": "*",
 		"@mariozechner/pi-tui": "*"
+	},
+	"peerDependenciesMeta": {
+		"hunkdiff": {
+			"optional": true
+		}
 	},
 	"devDependencies": {
 		"@earendil-works/pi-coding-agent": "*",

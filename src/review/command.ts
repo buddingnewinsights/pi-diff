@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 
-import { copyToClipboard } from "@earendil-works/pi-coding-agent";
-import { type AutocompleteItem, Text } from "@earendil-works/pi-tui";
+import { type ExtensionAPI, type ExtensionContext, copyToClipboard, type KeybindingsManager, type MessageRenderOptions, type SessionBeforeForkEvent, type SessionBeforeSwitchEvent, type SessionStartEvent, type SessionTreeEvent, type Theme } from "@earendil-works/pi-coding-agent";
+import { type AutocompleteItem, Text, type TUI } from "@earendil-works/pi-tui";
 
 import { type ReviewDiff, type ReviewDiffMode, readGitDiff } from "./git.js";
 import { getSelectedPreviewLine, selectPreviewLineForComment, syncPreviewSelection } from "./model.js";
@@ -20,32 +20,70 @@ import {
 	getSelectedHunk,
 	getSubmittableComments,
 	persistReviewDiffSession,
+	type ReviewDraftComment,
 	type ReviewDiffSession,
 	syncReviewDiffSession,
 } from "./session.js";
+import { checkHunkAvailable, launchHunkReview, type HunkComment } from "./hunk-bridge.js";
 import { ReviewDiffPane, type ReviewDiffPaneAction } from "./tui.js";
 
 const REVIEW_DIFF_POLL_MS = 1000;
 
-export function registerReviewDiffCommand(pi: any, cwd: string): void {
+// ─── Hunk availability cache (checked once per process lifetime) ──────────────
+
+let _hunkAvailable: boolean | undefined = undefined;
+let _hunkWarningShown = false;
+
+async function hunkAvailableCached(): Promise<boolean> {
+	if (_hunkAvailable === undefined) {
+		_hunkAvailable = await checkHunkAvailable();
+	}
+	return _hunkAvailable;
+}
+
+// ─── Helpers for mapping Hunk comments to ReviewDraftComment ─────────────────
+
+function hunkCommentToDraftComment(
+	comment: HunkComment,
+	index: number,
+): ReviewDraftComment {
+	return {
+		id: `H${String(index + 1).padStart(3, "0")}`,
+		file: comment.filePath,
+		line: comment.newLine || comment.oldLine || undefined,
+		oldNum: comment.oldLine || null,
+		newNum: comment.newLine || null,
+		body: comment.summary,
+		createdAt: new Date().toISOString(),
+		status: "approved",
+	};
+}
+
+function mapHunkCommentsToDraftComments(hunkComments: HunkComment[]): ReviewDraftComment[] {
+	return hunkComments.map((comment, index) => hunkCommentToDraftComment(comment, index));
+}
+
+export function registerReviewDiffCommand(pi: ExtensionAPI, cwd: string): void {
 	let latestSession: ReviewDiffSession | null = null;
 
-	const reconstruct = (ctx: any) => {
+	const reconstruct = (ctx: ExtensionContext) => {
 		latestSession = getLatestReviewDiffSession(ctx);
 	};
 
-	pi.on?.("session_start", async (_event: unknown, ctx: any) => reconstruct(ctx));
-	pi.on?.("session_switch", async (_event: unknown, ctx: any) => reconstruct(ctx));
-	pi.on?.("session_fork", async (_event: unknown, ctx: any) => reconstruct(ctx));
-	pi.on?.("session_tree", async (_event: unknown, ctx: any) => reconstruct(ctx));
+	pi.on?.("session_start", async (_event: SessionStartEvent, ctx: ExtensionContext) => reconstruct(ctx));
+	pi.on?.("session_before_switch", async (_event: SessionBeforeSwitchEvent, ctx: ExtensionContext) => reconstruct(ctx));
+	pi.on?.("session_before_fork", async (_event: SessionBeforeForkEvent, ctx: ExtensionContext) => reconstruct(ctx));
+	pi.on?.("session_tree", async (_event: SessionTreeEvent, ctx: ExtensionContext) => reconstruct(ctx));
 
-	pi.registerMessageRenderer?.("review-diff-submit", (message: any, _options: any, theme: any) => {
-		return new Text(theme.fg("success", theme.bold("review-diff ")) + message.content, 0, 0);
+	pi.registerMessageRenderer?.("review-diff-submit", (message: { content: string | Array<{ type: string; text?: string }>; details?: Record<string, unknown> }, _options: MessageRenderOptions, theme: Theme) => {
+		const text = typeof message.content === "string" ? message.content : message.content.map((c) => c.text ?? "").join("");
+		return new Text(theme.fg("success", theme.bold("review-diff ")) + text, 0, 0);
 	});
-	pi.registerMessageRenderer?.("review-diff-status", (message: any, _options: any, theme: any) => {
+	pi.registerMessageRenderer?.("review-diff-status", (message: { content: string | Array<{ type: string; text?: string }>; details?: Record<string, unknown> }, _options: MessageRenderOptions, theme: Theme) => {
+		const text = typeof message.content === "string" ? message.content : message.content.map((c) => c.text ?? "").join("");
 		const level =
 			message.details?.level === "error" ? "error" : message.details?.level === "warning" ? "warning" : "muted";
-		return new Text(theme.fg(level, theme.bold("review-diff ")) + message.content, 0, 0);
+		return new Text(theme.fg(level, theme.bold("review-diff ")) + text, 0, 0);
 	});
 
 	pi.registerCommand?.("review-diff", {
@@ -62,7 +100,7 @@ export function registerReviewDiffCommand(pi: any, cwd: string): void {
 			const filtered = items.filter((item) => item.value.startsWith(prefix));
 			return filtered.length > 0 ? filtered : null;
 		},
-		handler: async (args: string | undefined, ctx: any) => {
+		handler: async (args: string | undefined, ctx: ExtensionContext) => {
 			if (!ctx.hasUI) {
 				notifyReviewDiff(pi, ctx, "/review-diff requires interactive mode", "error");
 				return;
@@ -76,169 +114,246 @@ export function registerReviewDiffCommand(pi: any, cwd: string): void {
 				return;
 			}
 
-			let session =
-				latestSession && sameMode(latestSession.mode, mode)
-					? cloneReviewDiffSession(latestSession)
-					: createReviewDiffSession(mode);
 			const initialDiff = loadReviewDiff(cwd, mode);
 			if (!initialDiff.ok) {
 				notifyReviewDiff(pi, ctx, initialDiff.message, "error");
 				return;
 			}
-			let diff = initialDiff.diff;
-			session = syncReviewDiffSession(session, diff);
-			syncPreviewSelection(session, diff);
-			persistReviewDiffSession(pi, session);
-			latestSession = session;
+			const diff = initialDiff.diff;
 
-			// eslint-disable-next-line no-constant-condition
-			while (true) {
-				const paneResult = await openReviewDiffPane(ctx, cwd, diff, session);
-				diff = paneResult.diff;
-				session = paneResult.session;
-				const action = paneResult.action;
-				if (action.type === "cancel") {
-					persistReviewDiffSession(pi, session);
-					latestSession = session;
-					return;
-				}
-				if (action.type === "refresh") {
-					const refreshed = loadReviewDiff(cwd, session.mode);
-					if (!refreshed.ok) {
-						notifyReviewDiff(pi, ctx, refreshed.message, "error");
-						continue;
-					}
-					diff = refreshed.diff;
-					session = syncReviewDiffSession(session, diff);
-					syncPreviewSelection(session, diff);
-					persistReviewDiffSession(pi, session);
-					latestSession = session;
-					continue;
-				}
-				if (action.type === "approve-all") {
-					approveAllComments(session);
-					selectPreviewLineForComment(session, diff);
-					syncPreviewSelection(session, diff);
-					persistReviewDiffSession(pi, session);
-					latestSession = session;
-					continue;
-				}
-				if (action.type === "add-comment") {
-					const file = getSelectedFile(diff, session);
-					const hunk = getSelectedHunk(diff, session);
-					const previewLine = getSelectedPreviewLine(diff, session);
-					if (!file || !hunk) {
-						ctx.ui.notify("Select a file and hunk before drafting a comment", "warning");
-						continue;
-					}
-					const lineNumber = previewLine?.newNum ?? previewLine?.oldNum ?? firstChangedLine(hunk) ?? hunk.newStart;
-					const body = await ctx.ui.editor(
-						`Draft review comment for ${file.path}`,
-						commentSeed(file.path, hunk.id, lineNumber),
-					);
-					if (!body || !body.trim()) continue;
-					addDraftComment(
-						session,
-						createDraftComment({
-							session,
-							file: file.path,
-							body: body.trim(),
-							line: lineNumber,
-							hunkId: previewLine?.hunkId ?? hunk.id,
-							previewLineId: previewLine?.id,
-							oldNum: previewLine?.oldNum,
-							newNum: previewLine?.newNum,
-							lineType: previewLine?.kind === "hunk-header" ? undefined : previewLine?.kind,
-						}),
-					);
-					syncPreviewSelection(session, diff);
-					persistReviewDiffSession(pi, session);
-					latestSession = session;
-					continue;
-				}
-				if (action.type === "edit-comment") {
-					const selected = getSelectedComment(session);
-					if (!selected) {
-						ctx.ui.notify("No drafted comment selected. Press c to draft one first, or Tab to Comments.", "warning");
-						continue;
-					}
-					const body = await ctx.ui.editor(`Edit ${selected.id}`, selected.body);
-					if (!body || !body.trim()) continue;
-					editSelectedComment(session, body.trim());
-					selectPreviewLineForComment(session, diff);
-					persistReviewDiffSession(pi, session);
-					latestSession = session;
-					continue;
-				}
-				if (action.type === "open-location") {
-					const location = buildSelectedLocationText(diff, session);
-					if (!location) {
-						ctx.ui.notify("No selected review location to open", "warning");
-						continue;
-					}
-					ctx.ui.setEditorText(location);
-					ctx.ui.notify("Selected review location loaded into the editor", "info");
-					persistReviewDiffSession(pi, session);
-					latestSession = session;
-					return;
-				}
-				if (action.type === "copy-location") {
-					const location = buildSelectedLocationText(diff, session);
-					if (!location) {
-						ctx.ui.notify("No selected review location to copy", "warning");
-						continue;
-					}
-					try {
-						await copyToClipboard(location);
-						ctx.ui.notify("Selected review location copied to clipboard", "info");
-					} catch {
-						ctx.ui.setEditorText(location);
-						ctx.ui.notify("Clipboard unavailable; selected review location loaded into the editor", "warning");
-					}
-					persistReviewDiffSession(pi, session);
-					latestSession = session;
-					continue;
-				}
-				if (action.type === "delete-comment") {
-					const removed = deleteSelectedComment(session);
-					if (removed) ctx.ui.notify(`Removed ${removed.id}`, "info");
-					selectPreviewLineForComment(session, diff);
-					syncPreviewSelection(session, diff);
-					persistReviewDiffSession(pi, session);
-					latestSession = session;
-					continue;
-				}
-				if (action.type === "submit") {
-					const comments = getSubmittableComments(session);
-					if (comments.length === 0) {
-						ctx.ui.notify("No approved comments selected for submission", "warning");
-						continue;
-					}
-					const prompt = buildReviewDiffPrompt(diff, session);
-					if (typeof ctx.isIdle === "function" && !ctx.isIdle()) {
-						pi.sendUserMessage(prompt, { deliverAs: "followUp" });
-					} else {
-						pi.sendUserMessage(prompt);
-					}
-					session.submittedAt = Date.now();
-					persistReviewDiffSession(pi, session);
-					latestSession = session;
-					pi.sendMessage?.({
-						customType: "review-diff-submit",
-						content: `${comments.length} comment(s) queued for Pi from ${session.mode.type === "branch" ? `${session.mode.base}...HEAD` : "working tree"}`,
-						display: true,
-						details: { commentCount: comments.length, mode: session.mode },
-					});
-					ctx.ui.notify(`Queued ${comments.length} review comment(s) for Pi`, "info");
-					return;
-				}
+			const available = await hunkAvailableCached();
+			if (available) {
+				// ── Hunk path ────────────────────────────────────────────────
+				await handleHunkReview(pi, ctx, cwd, diff, mode, latestSession);
+				return;
 			}
+
+			// ── Fallback path (TUI) ─────────────────────────────────────────
+			if (!_hunkWarningShown) {
+				_hunkWarningShown = true;
+				notifyReviewDiff(
+					pi,
+					ctx,
+					"Hunk not found — using built-in review UI. Install with: npm i -g hunkdiff",
+					"warning",
+				);
+			}
+
+			await handleTuiReview(pi, ctx, cwd, diff, mode, latestSession);
 		},
 	});
 }
 
+/**
+ * Hunk review path: pipe git diff to `hunk patch -`, wait for exit,
+ * map returned comments to ReviewDraftComment[], and submit.
+ */
+async function handleHunkReview(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	cwd: string,
+	diff: ReviewDiff,
+	mode: ReviewDiffMode,
+	latestSession: ReviewDiffSession | null,
+): Promise<void> {
+	let session =
+		latestSession && sameMode(latestSession.mode, mode)
+			? cloneReviewDiffSession(latestSession)
+			: createReviewDiffSession(mode);
+	session = syncReviewDiffSession(session, diff);
+	persistReviewDiffSession(pi, session);
+
+	const hunkResult = await launchHunkReview(cwd, diff.raw);
+
+	// Even if the process returned non-zero, attempt to harvest comments
+	const hunkComments = hunkResult.comments ?? [];
+	if (hunkComments.length > 0) {
+		const draftComments = mapHunkCommentsToDraftComments(hunkComments);
+		for (const dc of draftComments) {
+			addDraftComment(session, dc);
+		}
+		persistReviewDiffSession(pi, session);
+	}
+
+	const comments = getSubmittableComments(session);
+	if (comments.length > 0) {
+		const prompt = buildReviewDiffPrompt(diff, session);
+		if (typeof ctx.isIdle === "function" && !ctx.isIdle()) {
+			pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+		} else {
+			pi.sendUserMessage(prompt);
+		}
+		session.submittedAt = Date.now();
+		persistReviewDiffSession(pi, session);
+		pi.sendMessage?.({
+			customType: "review-diff-submit",
+			content: `${comments.length} comment(s) queued for Pi from ${session.mode.type === "branch" ? `${session.mode.base}...HEAD` : "working tree"}`,
+			display: true,
+			details: { commentCount: comments.length, mode: session.mode },
+		});
+		ctx.ui.notify(`Queued ${comments.length} review comment(s) for Pi`, "info");
+	} else {
+		ctx.ui.notify("Hunk review completed with no comments to submit.", "info");
+	}
+}
+
+/**
+ * Legacy TUI review path: open the ReviewDiffPane overlay with the existing
+ * session management, refresh, approve-all, and submit flows.
+ */
+async function handleTuiReview(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	cwd: string,
+	diff: ReviewDiff,
+	mode: ReviewDiffMode,
+	latestSession: ReviewDiffSession | null,
+): Promise<void> {
+	let session =
+		latestSession && sameMode(latestSession.mode, mode)
+			? cloneReviewDiffSession(latestSession)
+			: createReviewDiffSession(mode);
+	session = syncReviewDiffSession(session, diff);
+	syncPreviewSelection(session, diff);
+	persistReviewDiffSession(pi, session);
+
+	// eslint-disable-next-line no-constant-condition
+	while (true) {
+		const paneResult = await openReviewDiffPane(ctx, cwd, diff, session);
+		diff = paneResult.diff;
+		session = paneResult.session;
+		const action = paneResult.action;
+		if (action.type === "cancel") {
+			persistReviewDiffSession(pi, session);
+			return;
+		}
+		if (action.type === "refresh") {
+			const refreshed = loadReviewDiff(cwd, session.mode);
+			if (!refreshed.ok) {
+				notifyReviewDiff(pi, ctx, refreshed.message, "error");
+				continue;
+			}
+			diff = refreshed.diff;
+			session = syncReviewDiffSession(session, diff);
+			syncPreviewSelection(session, diff);
+			persistReviewDiffSession(pi, session);
+			continue;
+		}
+		if (action.type === "approve-all") {
+			approveAllComments(session);
+			selectPreviewLineForComment(session, diff);
+			syncPreviewSelection(session, diff);
+			persistReviewDiffSession(pi, session);
+			continue;
+		}
+		if (action.type === "add-comment") {
+			const file = getSelectedFile(diff, session);
+			const hunk = getSelectedHunk(diff, session);
+			const previewLine = getSelectedPreviewLine(diff, session);
+			if (!file || !hunk) {
+				ctx.ui.notify("Select a file and hunk before drafting a comment", "warning");
+				continue;
+			}
+			const lineNumber = previewLine?.newNum ?? previewLine?.oldNum ?? firstChangedLine(hunk) ?? hunk.newStart;
+			const body = await ctx.ui.editor(
+				`Draft review comment for ${file.path}`,
+				commentSeed(file.path, hunk.id, lineNumber),
+			);
+			if (!body || !body.trim()) continue;
+			addDraftComment(
+				session,
+				createDraftComment({
+					session,
+					file: file.path,
+					body: body.trim(),
+					line: lineNumber,
+					hunkId: previewLine?.hunkId ?? hunk.id,
+					previewLineId: previewLine?.id,
+					oldNum: previewLine?.oldNum,
+					newNum: previewLine?.newNum,
+					lineType: previewLine?.kind === "hunk-header" ? undefined : previewLine?.kind,
+				}),
+			);
+			syncPreviewSelection(session, diff);
+			persistReviewDiffSession(pi, session);
+			continue;
+		}
+		if (action.type === "edit-comment") {
+			const selected = getSelectedComment(session);
+			if (!selected) {
+				ctx.ui.notify("No drafted comment selected. Press c to draft one first, or Tab to Comments.", "warning");
+				continue;
+			}
+			const body = await ctx.ui.editor(`Edit ${selected.id}`, selected.body);
+			if (!body || !body.trim()) continue;
+			editSelectedComment(session, body.trim());
+			selectPreviewLineForComment(session, diff);
+			persistReviewDiffSession(pi, session);
+			continue;
+		}
+		if (action.type === "open-location") {
+			const location = buildSelectedLocationText(diff, session);
+			if (!location) {
+				ctx.ui.notify("No selected review location to open", "warning");
+				continue;
+			}
+			ctx.ui.setEditorText(location);
+			ctx.ui.notify("Selected review location loaded into the editor", "info");
+			persistReviewDiffSession(pi, session);
+			return;
+		}
+		if (action.type === "copy-location") {
+			const location = buildSelectedLocationText(diff, session);
+			if (!location) {
+				ctx.ui.notify("No selected review location to copy", "warning");
+				continue;
+			}
+			try {
+				await copyToClipboard(location);
+				ctx.ui.notify("Selected review location copied to clipboard", "info");
+			} catch {
+				ctx.ui.setEditorText(location);
+				ctx.ui.notify("Clipboard unavailable; selected review location loaded into the editor", "warning");
+			}
+			persistReviewDiffSession(pi, session);
+			continue;
+		}
+		if (action.type === "delete-comment") {
+			const removed = deleteSelectedComment(session);
+			if (removed) ctx.ui.notify(`Removed ${removed.id}`, "info");
+			selectPreviewLineForComment(session, diff);
+			syncPreviewSelection(session, diff);
+			persistReviewDiffSession(pi, session);
+			continue;
+		}
+		if (action.type === "submit") {
+			const comments = getSubmittableComments(session);
+			if (comments.length === 0) {
+				ctx.ui.notify("No approved comments selected for submission", "warning");
+				continue;
+			}
+			const prompt = buildReviewDiffPrompt(diff, session);
+			if (typeof ctx.isIdle === "function" && !ctx.isIdle()) {
+				pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+			} else {
+				pi.sendUserMessage(prompt);
+			}
+			session.submittedAt = Date.now();
+			persistReviewDiffSession(pi, session);
+			pi.sendMessage?.({
+				customType: "review-diff-submit",
+				content: `${comments.length} comment(s) queued for Pi from ${session.mode.type === "branch" ? `${session.mode.base}...HEAD` : "working tree"}`,
+				display: true,
+				details: { commentCount: comments.length, mode: session.mode },
+			});
+			ctx.ui.notify(`Queued ${comments.length} review comment(s) for Pi`, "info");
+			return;
+		}
+	}
+}
+
 async function openReviewDiffPane(
-	ctx: any,
+	ctx: ExtensionContext,
 	cwd: string,
 	diff: ReviewDiff,
 	session: ReviewDiffSession,
@@ -246,7 +361,7 @@ async function openReviewDiffPane(
 	let liveDiff = diff;
 	let liveSession = session;
 	const action = await ctx.ui.custom(
-		(tui: any, theme: any, _kb: any, done: (action: ReviewDiffPaneAction) => void) => {
+		(tui: TUI, theme: Theme, _kb: KeybindingsManager, done: (action: ReviewDiffPaneAction) => void) => {
 			const pane = new ReviewDiffPane(liveDiff, liveSession, theme, done, {
 				requestRender: () => tui.requestRender(),
 			});
@@ -365,7 +480,7 @@ function extractGitErrorDetail(error: unknown): string {
 	return typeof message === "string" ? message.trim() : "";
 }
 
-function notifyReviewDiff(pi: any, ctx: any, message: string, level: "info" | "warning" | "error"): void {
+function notifyReviewDiff(pi: ExtensionAPI, ctx: ExtensionContext, message: string, level: "info" | "warning" | "error"): void {
 	if (ctx?.ui && typeof ctx.ui.notify === "function") {
 		ctx.ui.notify(message, level);
 		return;
