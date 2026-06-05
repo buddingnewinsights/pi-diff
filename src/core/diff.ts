@@ -221,9 +221,9 @@ export function sepLabelUnified(
 		}
 		case "auto":
 		default:
-			if (ctx && gap && gap > 0) return ` ${ctx} — ${gap} lines `;
+			if (ctx && gap && gap > 0) return ` ${ctx} — +${gap} lines `;
 			if (ctx) return ` ${ctx} `;
-			if (gap && gap > 0) return ` ${gap} unmodified lines `;
+			if (gap && gap > 0) return ` +${gap} lines `;
 			return "···";
 	}
 }
@@ -257,9 +257,9 @@ export function sepLabelSplit(
 		}
 		case "auto":
 		default:
-			if (ctx && gap && gap > 0) return `··· ${ctx} — ${gap} lines ···`;
+			if (ctx && gap && gap > 0) return `··· ${ctx} — +${gap} lines ···`;
 			if (ctx) return `··· ${ctx} ···`;
-			if (gap && gap > 0) return `··· ${gap} lines ···`;
+			if (gap && gap > 0) return `··· +${gap} lines ···`;
 			return "···";
 	}
 }

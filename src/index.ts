@@ -1588,9 +1588,10 @@ Examples:
 
 			// Store in details — the only custom field TUI preserves in renderResult
 			if (old !== null && old !== content) {
-				const diff = parseDiff(old, content);
+				const useFull = !!(params as any)._expandGaps;
+				const diff = parseDiff(old, content, useFull ? undefined : 3);
 				const lg = detectDiffLanguage(fp);
-				(result as Record<string, unknown>).details = { _type: "diff", summary: summarize(diff.added, diff.removed), diff, language: lg };
+				(result as Record<string, unknown>).details = { _type: "diff", summary: summarize(diff.added, diff.removed), diff, language: lg, oldContent: old, newContent: content };
 			} else if (old === null) {
 				const lineCount = content ? content.split("\n").length : 0;
 				(result as Record<string, unknown>).details = { _type: "new", lines: lineCount, content: content ?? "", filePath: fp };
@@ -1763,7 +1764,19 @@ Examples:
 				} catch {
 					editLine = 0;
 				}
-				(result as Record<string, unknown>).details = { _type: "editInfo", summary, editLine, diff: diffs[0], language: lg };
+				const useFull = !!(params as any)._expandGaps;
+				const diffData = useFull
+					? parseDiff(operations[0].oldText, operations[0].newText, undefined)
+					: diffs[0];
+				(result as Record<string, unknown>).details = {
+					_type: "editInfo",
+					summary,
+					editLine,
+					diff: diffData,
+					language: lg,
+					oldContent: operations[0].oldText,
+					newContent: operations[0].newText,
+				};
 				return result;
 			}
 

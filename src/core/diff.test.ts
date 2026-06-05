@@ -213,7 +213,7 @@ describe("sepLabelUnified", () => {
 	const makeMeta = (ctx?: string): HunkMeta => ({ oldStart: 10, oldLines: 6, newStart: 10, newLines: 8, context: ctx });
 
 	it("auto style shows context + gap when both available", () => {
-		expect(sepLabelUnified("auto", makeMeta("fn()"), 5)).toBe(" fn() — 5 lines ");
+		expect(sepLabelUnified("auto", makeMeta("fn()"), 5)).toBe(" fn() — +5 lines ");
 	});
 
 	it("auto style shows context without gap", () => {
@@ -221,7 +221,7 @@ describe("sepLabelUnified", () => {
 	});
 
 	it("auto style shows gap only", () => {
-		expect(sepLabelUnified("auto", makeMeta(), 5)).toBe(" 5 unmodified lines ");
+		expect(sepLabelUnified("auto", makeMeta(), 5)).toBe(" +5 lines ");
 	});
 
 	it("auto style shows ellipsis when nothing available", () => {
@@ -266,7 +266,7 @@ describe("sepLabelSplit", () => {
 	const makeMeta = (ctx?: string): HunkMeta => ({ oldStart: 10, oldLines: 6, newStart: 10, newLines: 8, context: ctx });
 
 	it("auto style shows context + gap", () => {
-		expect(sepLabelSplit("auto", makeMeta("fn()"), 5)).toBe("··· fn() — 5 lines ···");
+		expect(sepLabelSplit("auto", makeMeta("fn()"), 5)).toBe("··· fn() — +5 lines ···");
 	});
 
 	it("context style shows context", () => {
