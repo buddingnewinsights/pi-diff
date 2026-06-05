@@ -1154,8 +1154,7 @@ async function renderSplit(
 	if (!shouldUseSplit(diff, tw, max)) return renderUnified(diff, language, max, dc);
 	if (!diff.lines.length) return "";
 
-	// Build rows
-	// Build paired rows using HunkBlock model
+	// Build rows — process ctx/sep individually, group del/add blocks
 	type Row = { left: DiffLine | null; right: DiffLine | null };
 	const rows: Row[] = [];
 	let i = 0;
@@ -1171,16 +1170,19 @@ async function renderSplit(
 			i++;
 			continue;
 		}
-		// Use computeHunkBlocks for the remaining diff to build paired rows
-		const blocks = computeHunkBlocks({ lines: diff.lines.slice(i), added: 0, removed: 0, chars: 0 });
-		for (const block of blocks) {
-			const n = Math.max(block.deletions.length, block.additions.length);
-			for (let j = 0; j < n; j++) {
-				rows.push({ left: block.deletions[j] ?? null, right: block.additions[j] ?? null });
-			}
-			i += block.deletions.length + block.additions.length;
+		// Collect del/add block
+		const dels: DiffLine[] = [];
+		while (i < diff.lines.length && diff.lines[i].type === "del") {
+			dels.push(diff.lines[i]);
+			i++;
 		}
-		break;
+		const adds: DiffLine[] = [];
+		while (i < diff.lines.length && diff.lines[i].type === "add") {
+			adds.push(diff.lines[i]);
+			i++;
+		}
+		const n = Math.max(dels.length, adds.length);
+		for (let j = 0; j < n; j++) rows.push({ left: dels[j] ?? null, right: adds[j] ?? null });
 	}
 
 	const vis = rows.slice(0, max);

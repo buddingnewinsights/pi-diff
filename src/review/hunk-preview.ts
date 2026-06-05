@@ -5,7 +5,7 @@ import { codeToANSI } from "@shikijs/cli";
 import * as Diff from "diff";
 import type { BundledLanguage, BundledTheme } from "shiki";
 
-import { computeHunkBlocks, getSepStyle, type ParsedDiff, sepLabelSplit, sepLabelUnified } from "../core/diff.js";
+import { getSepStyle, type ParsedDiff, sepLabelSplit, sepLabelUnified } from "../core/diff.js";
 import type { ReviewHunk } from "./git.js";
 
 export interface ReviewHunkPreviewInput {
@@ -914,7 +914,7 @@ export async function renderSplit(
 	if (!shouldUseSplit(diff, width, maxLines)) return renderUnified(diff, language, maxLines, colors, width);
 	if (!diff.lines.length) return "";
 
-	// Build paired rows using HunkBlock model
+	// Build rows — process ctx/sep individually, group del/add blocks
 	type Row = { left: ParsedDiff["lines"][number] | null; right: ParsedDiff["lines"][number] | null };
 	const rows: Row[] = [];
 	let idx = 0;
@@ -930,16 +930,22 @@ export async function renderSplit(
 			idx++;
 			continue;
 		}
-		// Use computeHunkBlocks for remaining diff
-		const blocks = computeHunkBlocks({ lines: diff.lines.slice(idx), added: 0, removed: 0, chars: 0 });
-		for (const block of blocks) {
-			const count = Math.max(block.deletions.length, block.additions.length);
-			for (let r = 0; r < count; r++) {
-				rows.push({ left: block.deletions[r] ?? null, right: block.additions[r] ?? null });
-			}
-			idx += block.deletions.length + block.additions.length;
+		// Collect del/add block
+		const dels: ParsedDiff["lines"] = [];
+		while (idx < diff.lines.length && diff.lines[idx]?.type === "del") {
+			const dl = diff.lines[idx];
+			if (dl) dels.push(dl);
+			idx++;
 		}
-		break;
+		const adds: ParsedDiff["lines"] = [];
+		while (idx < diff.lines.length && diff.lines[idx]?.type === "add") {
+			const al = diff.lines[idx];
+			if (al) adds.push(al);
+			idx++;
+		}
+		const count = Math.max(dels.length, adds.length);
+		for (let r = 0; r < count; r++)
+			rows.push({ left: dels[r] ?? null, right: adds[r] ?? null });
 	}
 
 	const visible = rows.slice(0, maxLines);
