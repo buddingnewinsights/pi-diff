@@ -4,8 +4,10 @@
 // Config priority (highest first):
 //   1. Environment variables (PI_DIFF_*) — for runtime/tool overrides
 //   2. Project-level pi-diff.json (<cwd>/pi-diff.json)
-//   3. Global-level pi-diff.json (~/.pi/agent/pi-diff.json)
-//   4. Hardcoded defaults
+//   3. Project-level .pi/pi-diff.json (pi-standard hidden config dir)
+//   4. Global-level pi-diff.json (~/.pi/agent/pi-diff.json)
+//   5. Global-level pi-diff.json (~/.pi/pi-diff.json)
+//   6. Hardcoded defaults
 //
 // The env vars are read by the individual resolvers in diff.ts;
 // this module handles file-based config only.
@@ -73,11 +75,16 @@ export function loadPiDiffConfig(cwd?: string): PiDiffJson {
 	// When a specific cwd is provided (e.g. for testing), only search that path.
 	// When omitted, search project root then global.
 	const searchPaths = cwd
-		? [join(cwd, "pi-diff.json")]
+		? [
+				join(cwd, "pi-diff.json"),
+				join(cwd, ".pi", "pi-diff.json"),
+		  ]
 		: [
 				join(process.cwd(), "pi-diff.json"),
+				join(process.cwd(), ".pi", "pi-diff.json"),
 				join(homedir(), ".pi", "agent", "pi-diff.json"),
-			];
+				join(homedir(), ".pi", "pi-diff.json"),
+		  ];
 
 	// Deduplicate by resolving to absolute paths
 	const seen = new Set<string>();

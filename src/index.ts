@@ -30,6 +30,7 @@ import type { BundledLanguage, BundledTheme } from "shiki";
 import type { Component } from "@earendil-works/pi-tui";
 
 import { computeHunkBlocks, type DiffLine, type ParsedDiff, getSepStyle, parseDiff, parsePatchFiles, resolveSepStyle, sepLabelSplit, sepLabelUnified } from "./core/diff.js";
+import { configIndicatorStyle } from "./core/config.js";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolveLines, resolveLinesFromPatch } from "./core/resolve-lines.js";
 import { registerReviewDiffCommand } from "./review/command.js";
@@ -469,7 +470,10 @@ let FG_SAFE_MUTED = "\x1b[38;2;139;148;158m";
 
 let FG_STRIPE = "\x1b[38;2;40;40;40m"; // gray diagonal stripes on terminal default bg
 
-const BORDER_BAR = "▌";
+function getBorderBar(): string {
+	const style = configIndicatorStyle();
+	return style === "none" ? " " : "▌";
+}
 
 /** Generate a dense diagonal stripe fill for empty filler cells.
  *  Solid ╱ characters — uniform direction like CSS diagonal hatching. */
@@ -1050,7 +1054,7 @@ async function renderUnified(
 		bodyBg = "",
 	): void {
 		const borderFg = sign === "-" ? dc.fgDel : sign === "+" ? dc.fgAdd : "";
-		const border = borderFg ? `${borderFg}${BORDER_BAR}${RST}` : `${BG_BASE} `;
+		const border = borderFg ? `${borderFg}${getBorderBar()}${RST}` : `${BG_BASE} `;
 		const numFg = borderFg || FG_LNUM;
 		const gutter = `${border}${gutterBg}${lnum(num, nw, numFg)}${signFg}${sign}${RST} ${DIVIDER} `;
 		const contGutter = `${border}${gutterBg}${" ".repeat(nw + 1)}${RST} ${DIVIDER} `;
@@ -1240,7 +1244,7 @@ async function renderSplit(
 
 		// Border bar + colored line numbers for changed lines
 		const borderFg = isDel ? dc.fgDel : isAdd ? dc.fgAdd : "";
-		const border = borderFg ? `${borderFg}${BORDER_BAR}${RST}` : ` ${BG_BASE}`;
+		const border = borderFg ? `${borderFg}${getBorderBar()}${RST}` : ` ${BG_BASE}`;
 		const numFg = borderFg || FG_LNUM;
 
 		let body: string;

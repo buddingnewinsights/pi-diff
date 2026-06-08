@@ -6,6 +6,7 @@ import * as Diff from "diff";
 import type { BundledLanguage, BundledTheme } from "shiki";
 
 import { getSepStyle, type ParsedDiff, sepLabelSplit, sepLabelUnified } from "../core/diff.js";
+import { configIndicatorStyle } from "../core/config.js";
 import type { ReviewHunk } from "./git.js";
 
 export interface ReviewHunkPreviewInput {
@@ -146,7 +147,10 @@ let FG_LNUM = "\x1b[38;2;100;100;100m";
 let FG_RULE = "\x1b[38;2;50;50;50m";
 let FG_SAFE_MUTED = "\x1b[38;2;139;148;158m";
 let FG_STRIPE = "\x1b[38;2;40;40;40m";
-const BORDER_BAR = "▌";
+function getBorderBar(): string {
+	const style = configIndicatorStyle();
+	return style === "none" ? " " : "▌";
+}
 let DIVIDER = `${FG_RULE}│${RST}`;
 const ESC_RE = "\u001b";
 const ANSI_RE = new RegExp(`${ESC_RE}\\[[0-9;]*m`, "g");
@@ -826,7 +830,7 @@ export async function renderUnified(
 		bodyBg = "",
 	): void {
 		const borderFg = sign === "-" ? colors.fgDel : sign === "+" ? colors.fgAdd : "";
-		const border = borderFg ? `${borderFg}${BORDER_BAR}${RST}` : `${BG_BASE} `;
+		const border = borderFg ? `${borderFg}${getBorderBar()}${RST}` : `${BG_BASE} `;
 		const numFg = borderFg || FG_LNUM;
 		const gutter = `${border}${gutterBg}${lnum(number, numberWidth, numFg)}${signFg}${sign}${RST} ${DIVIDER} `;
 		const continuationGutter = `${border}${gutterBg}${" ".repeat(numberWidth + 1)}${RST} ${DIVIDER} `;
@@ -1000,7 +1004,7 @@ export async function renderSplit(
 		const sign = isDeletion ? "-" : isAddition ? "+" : " ";
 		const number = isDeletion ? line.oldNum : isAddition ? line.newNum : side === "left" ? line.oldNum : line.newNum;
 		const borderFg = isDeletion ? colors.fgDel : isAddition ? colors.fgAdd : "";
-		const border = borderFg ? `${borderFg}${BORDER_BAR}${RST}` : `${BG_BASE} `;
+		const border = borderFg ? `${borderFg}${getBorderBar()}${RST}` : `${BG_BASE} `;
 		const numFg = borderFg || FG_LNUM;
 		let body = isDeletion || isAddition ? `${codeBg}${highlight}` : `${BG_BASE}${DIM}${highlight}`;
 		if (ranges && ranges.length > 0) body = injectBg(highlight, ranges, codeBg, isDeletion ? BG_DEL_W : BG_ADD_W);
