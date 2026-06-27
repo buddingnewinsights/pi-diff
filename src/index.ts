@@ -39,9 +39,8 @@ import {
   sepLabelSplit,
   sepLabelUnified,
 } from "./core/diff.js";
-import { replace } from "./core/replace.js";
-import { resolveLinesFromPatch } from "./core/resolve-lines.js";
-import { registerReviewDiffCommand } from "./review/command.js";
+    import { replace } from "./core/replace.js";
+    import { registerReviewDiffCommand } from "./review/command.js";
 
 import {
   applyDiffPalette as applySharedDiffPalette,
@@ -1562,172 +1561,11 @@ export default async function diffRendererExtension(pi: ExtensionAPI): Promise<v
     return text;
   }
 
-  registerReviewDiffCommand(pi, cwd);
+    registerReviewDiffCommand(pi, cwd);
 
-  // ── resolve_lines tool ────────────────────────────────────────────────
-
-  pi.registerTool({
-    name: "resolve_lines",
-    label: "Resolve Lines",
-    description: `Resolve line numbers for an LLM code-review comment by matching its existing_code snippet against the git diff hunks. Uses a three-tier algorithm: new-side hunk match, old-side hunk match, then full file-content scan. Returns \`startLine\` and \`endLine\` when found, or \`unresolved: true\` when the snippet cannot be located.
-
-Three-tier resolution:
-  1. Match against diff hunks (new-file side) — context + added lines
-  2. Match against diff hunks (old-file side) — context + deleted lines
-  3. Scan full file content for a consecutive line match
-
-Use after receiving a review comment with \`existing_code\` but zero or drifted line numbers. The tool fetches the current git diff for the file automatically when \`patchText\` is omitted.
-
-Examples:
-  resolve_lines({ existingCode: "const x = 1;", filePath: "src/index.ts" })
-  resolve_lines({ existingCode: "function foo() {", filePath: "src/utils.ts", patchText: "@@ -1,3 +1,4 @@..." })`,
-    promptSnippet:
-      "Resolve line numbers for an LLM review comment by matching existing_code against git diff hunks.",
-    parameters: {
-      type: "object",
-      properties: {
-        existingCode: {
-          type: "string",
-          description:
-            "The code snippet from the LLM review comment that shows the problematic code. Required.",
-        },
-        filePath: {
-          type: "string",
-          description: "Path to the file this comment is about, relative to repo root. Required.",
-        },
-        patchText: {
-          type: "string",
-          description:
-            "Optional raw unified diff text for the file. When omitted, pi-diff fetches the git diff automatically.",
-        },
-        fileContent: {
-          type: "string",
-          description:
-            "Optional full new-file content for fallback line scan after hunk matching fails.",
-        },
-      },
-      required: ["existingCode", "filePath"],
-      additionalProperties: false,
-    },
-
-    async execute(_tid: string, params: any = {}): Promise<any> {
-      try {
-        const { existingCode, filePath, patchText, fileContent } = params ?? {};
-        if (!existingCode || !filePath) {
-          return {
-            content: [
-              { type: "text" as const, text: "Error: existingCode and filePath are required" },
-            ],
-          };
-        }
-
-        // Fetch git diff if patchText not provided
-        let patch = patchText;
-        if (!patch) {
-          const { execFileSync } = await import("node:child_process");
-          try {
-            patch = execFileSync("git", ["diff", "--no-ext-diff", "HEAD", "--", filePath], {
-              cwd,
-              encoding: "utf8",
-              maxBuffer: 1024 * 1024,
-              stdio: ["ignore", "pipe", "pipe"],
-            }).trim();
-            // Also try unstaged diff
-            const unstaged = execFileSync("git", ["diff", "--no-ext-diff", "--", filePath], {
-              cwd,
-              encoding: "utf8",
-              maxBuffer: 1024 * 1024,
-              stdio: ["ignore", "pipe", "pipe"],
-            }).trim();
-            if (unstaged) {
-              patch = patch ? [patch, unstaged].filter(Boolean).join("\n") : unstaged;
-            }
-          } catch {
-            return {
-              content: [
-                { type: "text" as const, text: `Error: could not read git diff for ${filePath}` },
-              ],
-            };
-          }
-        }
-
-        if (!patch) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `No diff found for ${filePath} — file may not have changes`,
-              },
-            ],
-            details: { unresolved: true },
-          };
-        }
-
-        const result = resolveLinesFromPatch(existingCode, patch, fileContent);
-
-        if ("unresolved" in result) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Could not resolve line numbers for existing_code in ${filePath}`,
-              },
-            ],
-            details: { unresolved: true },
-          };
-        }
-
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Resolved ${filePath}:${result.startLine}-${result.endLine}`,
-            },
-          ],
-          details: { startLine: result.startLine, endLine: result.endLine },
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return {
-          content: [{ type: "text" as const, text: `Error: ${message}` }],
-          details: { unresolved: true, error: message },
-        };
-      }
-    },
-
-    renderCall(args: Record<string, unknown>, theme: any, ctx: any) {
-      const text = ctx.lastComponent ?? new TextComponent("", 0, 0);
-      const fp = typeof args?.filePath === "string" ? args.filePath : "";
-      text.setText(
-        `${theme.fg("toolTitle", theme.bold("resolve_lines"))} ${theme.fg("accent", fp)}`,
-      );
-      return text;
-    },
-
-    renderResult(result: any, _opt: any, theme: any, ctx: any) {
-      const text = ctx.lastComponent ?? new TextComponent("", 0, 0);
-      if (ctx.isError || result.details?.error) {
-        text.setText(`\n${theme.fg("error", result.details?.error ?? "resolve_lines failed")}`);
-        return text;
-      }
-      if (result.details?.unresolved) {
-        text.setText(`  ${theme.fg("muted", "unresolved")}`);
-        return text;
-      }
-      if (result.details?.startLine != null) {
-        text.setText(
-          `  ${theme.fg("success", `lines ${result.details.startLine}-${result.details.endLine}`)}`,
-        );
-        return text;
-      }
-      text.setText(`  ${theme.fg("dim", String(result?.content?.[0]?.text ?? "").slice(0, 120))}`);
-      return text;
-    },
-  });
-
-  // =======================================================================
-  // write
-  // =======================================================================
+      // =======================================================================
+      // write
+      // =======================================================================
 
   const origWrite = createWriteTool(cwd);
 

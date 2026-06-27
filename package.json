@@ -114,6 +114,7 @@
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.79.0",
     "@earendil-works/pi-tui": "^0.79.0",
+    "@heyhuynhgiabuu/pi-diff": "0.6.4",
     "@shikijs/cli": "^4.0.2",
     "diff": "^7.0.0"
   },
