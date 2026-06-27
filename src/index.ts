@@ -1425,16 +1425,11 @@ export default async function diffRendererExtension(pi: ExtensionAPI): Promise<v
     return injectBg(`${content}${padding}`, [], BG_BASE, BG_BASE);
   }
 
-      function formatToolHeader(summary: string, width: number): string {
-        const leftPad = " ".repeat(TOOL_HEADER_LEFT_PAD);
-        const meta = `${leftPad}${summary}`;
-        // Stats row stays neutral. Painting it with BG_BASE (the
-        // success-color tint) made the hunk header read as a "success"
-        // indicator, which is semantically wrong: it just describes
-        // the change, not its outcome. Only the diff body's add/del
-        // lines carry the BG_BASE tint (via BG_ADD / BG_DEL).
-        return meta.padEnd(width, " ");
-      }
+  function formatToolHeader(summary: string, width: number): string {
+    const leftPad = " ".repeat(TOOL_HEADER_LEFT_PAD);
+    const meta = `${leftPad}${summary}`;
+    return bgLine(meta, width);
+  }
 
   function formatToolTitle(
     label: string,
