@@ -1973,36 +1973,36 @@ export default async function diffRendererExtension(pi: ExtensionAPI): Promise<v
         return text;
       }
       const d = result.details;
-      if (d?._type === "editInfo" && d.diff) {
-        const loc = d.editLine > 0 ? ` ${theme.fg("muted", `at line ${d.editLine}`)}` : "";
-        setDiffPreviewTask(
-          text,
-          "ed",
-          `${d.summary}${loc}`,
-          d.diff,
-          d.language,
-          MAX_PREVIEW_LINES,
-          theme,
-          ctx,
-        );
-        return text;
-      }
-      if (d?._type === "editInfo") {
-        const { summary: s, editLine } = d;
-        const loc = editLine > 0 ? ` ${theme.fg("muted", `at line ${editLine}`)}` : "";
-        setToolHeaderText(text, `${s}${loc}`, theme);
-        return text;
-      }
-      if (d?._type === "multiEditInfo") {
-        const { summary: s, editCount, diffLineCount, diff, language } = d;
-        const meta = `${editCount} edits ${s}${diffLineCountLabel(diffLineCount, theme)}`;
-        if (diff) {
-          setDiffPreviewTask(text, "me", meta, diff, language, MAX_PREVIEW_LINES, theme, ctx);
-          return text;
-        }
-        setToolHeaderText(text, meta, theme);
-        return text;
-      }
+          if (d?._type === "editInfo" && d.diff) {
+            const loc = d.editLine > 0 ? ` ${theme.fg("muted", `at line ${d.editLine}`)}` : "";
+            setDiffPreviewTask(
+              text,
+              "ed",
+              loc,
+              d.diff,
+              d.language,
+              MAX_PREVIEW_LINES,
+              theme,
+              ctx,
+            );
+            return text;
+          }
+          if (d?._type === "editInfo") {
+            const { editLine } = d;
+            const loc = editLine > 0 ? ` ${theme.fg("muted", `at line ${editLine}`)}` : "";
+            setToolHeaderText(text, loc, theme);
+            return text;
+          }
+          if (d?._type === "multiEditInfo") {
+            const { editCount, diffLineCount, diff, language } = d;
+            const meta = `${editCount} edits${diffLineCountLabel(diffLineCount, theme)}`;
+            if (diff) {
+              setDiffPreviewTask(text, "me", meta, diff, language, MAX_PREVIEW_LINES, theme, ctx);
+              return text;
+            }
+            setToolHeaderText(text, meta, theme);
+            return text;
+          }
       text.__piDiffTask = undefined;
       text.setText(
         `  ${theme.fg("dim", String(result?.content?.[0]?.text ?? "edited").slice(0, 120))}`,
