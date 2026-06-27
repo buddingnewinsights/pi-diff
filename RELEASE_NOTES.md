@@ -36,6 +36,12 @@ folded into the title summary, so the title reads e.g.
 single edit. MultiEdit keeps its `N edits / diff lines` stats
 because that info is not in pi's native title.
 
+**Call preview also shows the line number.** Previously the
+`at line N` suffix only appeared in the result title, not the
+call preview. The call preview now reads the file once and
+locates the first `oldText` to compute the line number, so both
+panes are consistent.
+
 ### What you need to do
 
 Nothing. The next `pi install` (or upgrade) picks up 0.6.5

@@ -58,6 +58,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   only applied to one of four code paths in the edit tool's execute
   callback. All four (`editInfo` × 2, `multiEditInfo` × 2) now
   produce the same title format.
+- **Call preview title** — the `at line N` suffix was only
+  appearing in the result title. The call preview (rendered by
+  `renderCall`, shown while the edit is being dispatched) now
+  also shows the location, by reading the file once and locating
+  the first `oldText` before the SDK tool executes.
 
 ### Docs
 
