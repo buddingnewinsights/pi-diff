@@ -1413,6 +1413,22 @@ export default async function diffRendererExtension(pi: ExtensionAPI): Promise<v
   }
   if (!createWriteTool || !createEditTool || !TextComponent) return;
 
+  const editHeaderStatsByCallId = new Map<
+    string,
+    { edits: number; diffLines: number; added: number; removed: number }
+  >();
+
+  function stashEditHeaderStats(
+    toolCallId: string,
+    edits: number,
+    diffLines: number,
+    added: number,
+    removed: number,
+  ): void {
+    if (!toolCallId) return;
+    editHeaderStatsByCallId.set(toolCallId, { edits, diffLines, added, removed });
+  }
+
   const cwd = process.cwd();
   const home = process.env.HOME ?? "";
   const sp = (p: string) => shortPath(cwd, home, p);
@@ -1457,6 +1473,28 @@ export default async function diffRendererExtension(pi: ExtensionAPI): Promise<v
 
   function formatBottomPadding(width: number): string {
     return Array.from({ length: TOOL_PREVIEW_BOTTOM_PAD }, () => bgLine("", width)).join("\n");
+  }
+
+  function formatToolCallHeader(
+    label: string,
+    filePath: string,
+    theme: any,
+    width: number,
+    suffix = "",
+  ): string {
+    return [formatToolTitle(label, filePath, theme, width, suffix), formatBottomPadding(width)].join("\n");
+  }
+
+  function editEditsCountLabel(edits: number, diffLines: number, theme: any): string {
+    const n = edits === 1 ? "1 edit" : `${edits} edits`;
+    return `${n}${diffLineCountLabel(diffLines, theme)}`;
+  }
+
+  function editCallStatsSuffix(toolCallId: string | undefined, theme: any): string {
+    const raw = toolCallId ? editHeaderStatsByCallId.get(toolCallId) : undefined;
+    if (!raw) return "";
+    const count = editEditsCountLabel(raw.edits, raw.diffLines, theme);
+    return `${TOOL_RESULT_INDENT}${theme.fg("muted", count)} ${summarize(raw.added, raw.removed)}`;
   }
 
   function padDiffBody(rendered: string): string {
@@ -1692,39 +1730,38 @@ export default async function diffRendererExtension(pi: ExtensionAPI): Promise<v
         text.setText(`${TOOL_RESULT_INDENT}${theme.fg("muted", "✓ no changes")}`);
         return text;
       }
-      if (d?._type === "new") {
-        const { lines: lineCount, content: rawContent, filePath: fp } = d;
-        if (!ctx.expanded) {
-          text.setText(
-            `${TOOL_RESULT_INDENT}${theme.fg("success", `✓ new file (${lineCount} lines)`)}\n${TOOL_RESULT_INDENT}${theme.fg("muted", collapsedSummaryLine(`${lineCount} lines`))}`,
-          );
-          return text;
-        }
-        const pk = `nf:${sharedThemeCacheKey(theme)}:${fp}:${lineCount}`;
-        if (ctx.state._nfk !== pk) {
-          ctx.state._nfk = pk;
-          ctx.state._nft = `${TOOL_RESULT_INDENT}${theme.fg("success", `✓ new file (${lineCount} lines)`)}`;
-          const lg = detectDiffLanguage(fp);
-          if (rawContent) {
-            hlBlock(rawContent, lg)
-              .then((hlLines: string[]) => {
-                if (ctx.state._nfk !== pk) return;
-                const maxShow = ctx.expanded ? hlLines.length : 12;
-                const preview = hlLines.slice(0, maxShow).join("\n");
-                const rem = hlLines.length - maxShow;
-                let out = `${TOOL_RESULT_INDENT}${theme.fg("success", `✓ new file (${lineCount} lines)`)}\n${preview}`;
-                if (rem > 0) out += `\n${theme.fg("muted", `${TOOL_RESULT_INDENT}… ${rem} more lines`)}`;
-                ctx.state._nft = out;
-                ctx.invalidate();
-              })
-              .catch(() => {});
+          if (d?._type === "new") {
+            const { lines: lineCount, content: rawContent, filePath: fp } = d;
+            const w = termW();
+            const newHdr = bgLine(
+              `${theme.fg("success", `✓ new file (${lineCount} lines)`)}`,
+              w,
+            );
+            const pk = `nf:${sharedThemeCacheKey(theme)}:${fp}:${lineCount}`;
+            if (ctx.state._nfk !== pk) {
+              ctx.state._nfk = pk;
+              ctx.state._nft = newHdr;
+              const lg = detectDiffLanguage(fp);
+              if (rawContent) {
+                hlBlock(rawContent, lg)
+                  .then((hlLines: string[]) => {
+                    if (ctx.state._nfk !== pk) return;
+                    const maxShow = hlLines.length;
+                    const preview = hlLines.slice(0, maxShow).join("\n");
+                    const rem = hlLines.length - maxShow;
+                    let out = `${newHdr}\n${padDiffBody(preview)}`;
+                    if (rem > 0)
+                      out += `\n${bgLine(`${TOOL_RESULT_INDENT}${theme.fg("muted", `… ${rem} more lines`)}`, w)}`;
+                    ctx.state._nft = out;
+                    ctx.invalidate();
+                  })
+                  .catch(() => {});
+              }
+            }
+            text.setText(ctx.state._nft ?? newHdr);
+            return text;
           }
-        }
-        text.setText(
-          ctx.state._nft ?? `${TOOL_RESULT_INDENT}${theme.fg("success", `✓ new file (${lineCount} lines)`)}`,
-        );
-        return text;
-      }
+
       text.setText(
         `${TOOL_RESULT_INDENT}${theme.fg("dim", String(result?.content?.[0]?.text ?? "written").slice(0, 120))}`,
       );

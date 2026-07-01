@@ -4,6 +4,15 @@ All notable changes to `@heyhuynhgiabuu/pi-diff` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.9] — 2026-07-02
+
+### Changed
+
+- **Write/edit call headers** — `formatToolCallHeader` adds bottom padding under title rows; write/create streaming uses padded headers.
+- **Edit multi-edit stats** — `editHeaderStatsByCallId` / `editCallStatsSuffix`; `N edits (M diff lines) +X -Y` on the call line; `multiEditInfo` result omits duplicate stats meta row.
+- **New-file write (`_type: new`)** — default expanded preview; `✓ new file` and Shiki body on `toolSuccessBg` (`bgLine` / `padDiffBody`); no extra leading indent on the success line.
+- **`renderShell: "self"`** on patched write and edit tools.
+
 ## [0.6.8] — 2026-07-01
 
 ### Fixed

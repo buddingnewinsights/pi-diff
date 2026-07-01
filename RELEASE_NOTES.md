@@ -1,151 +1,15 @@
-# Release notes
+# @heyhuynhgiabuu/pi-diff v0.6.9
 
-## v0.6.6 — Hotfix for broken v0.6.5 npm package
+## Highlights
 
-### Fixed
+- **Write/edit headers** — title row + bottom padding (`formatToolCallHeader`); write/create call lines match edit spacing.
+- **Edit** — multi-edit count and diff stats on one call line; result body is diff-only (no second `N edits (…)` row).
+- **New file write** — full highlighted preview on tool background; always expanded for `_type: new`.
 
-- **`package.json` `files` array was missing `dist/edit-guard.*`**
-  in v0.6.5, so the published npm tarball loaded with:
-
-  ```
-  Failed to load extension ".../dist/index.js"
-    Cannot find module './edit-guard.js'
-  ```
-
-  This release adds the four missing entries (`edit-guard.d.ts`,
-  `edit-guard.d.ts.map`, `edit-guard.js`, `edit-guard.js.map`)
-  and re-publishes the package.
-
-### What you need to do
+## Install
 
 ```bash
-pi install @heyhuynhgiabuu/pi-diff@0.6.6
+pi install npm:@heyhuynhgiabuu/pi-diff@0.6.9
 ```
 
-### Verified
-
-- `npm run build` succeeds
-- `npm test` 98/98 pass
-- `npm pack --dry-run` lists `dist/edit-guard.js` in the file list
-
----
-
-## v0.6.5 — Rollback to v0.6.4 baseline + edit guard
-
-This file is the human-readable release log for `@heyhuynhgiabuu/pi-diff`.
-The machine-readable equivalent lives in `CHANGELOG.md`; this file is
-what the GitHub release page and `pi install` changelog picker will show.
-
-## 0.6.5 — 2026
-
-### What changed
-
-**Removed the review surface.** The interactive review module
-(`/review-diff` slash command, `review_git_diff` Pi tool,
-`pi-diff-review` CLI, and all review unit tests including the
-comment-related ones) is gone. The remaining `src/review/git.ts`
-and `src/review/hunk-preview.ts` are kept as shared
-diff-rendering primitives for the main extension.
-
-Review is now delegated to a separate extension such as
-[`badlogic/pi-diff-review`](https://github.com/badlogic/pi-diff-review):
-
-```bash
-pi install git:https://github.com/badlogic/pi-diff-review
-```
-
-Also removed the `resolve_lines` tool (unused since v0.6.4).
-
-**Added an edit guard.** `src/edit-guard.ts` registers a
-`tool_call` handler that blocks `edit` calls whose `oldText` is no
-longer present in the target file, returning a clear
-`VERIFY before EDIT` error. Prevents stale-`oldText` retry loops.
-
-**Fixed the hunk header.** The edit/multiEdit result no longer
-shows the diff summary in two places. The location (`at line N`) is
-folded into the title summary, so the title reads e.g.
-`+9 -4 at line 1944` and the separate stats row is gone for the
-single edit. MultiEdit keeps its `N edits / diff lines` stats
-because that info is not in pi's native title.
-
-**Call preview also shows the line number.** Previously the
-`at line N` suffix only appeared in the result title, not the
-call preview. The call preview now reads the file once and
-locates the first `oldText` to compute the line number, so both
-panes are consistent.
-
-### What you need to do
-
-Nothing. The next `pi install` (or upgrade) picks up 0.6.5
-automatically. If you pinned a specific version, run:
-
-```bash
-pi install @heyhuynhgiabuu/pi-diff@0.6.5
-```
-
-To verify it's working, start pi and look for the
-`@heyhuynhgiabuu/pi-diff` line in the extension list. There should
-be no errors and edit calls with stale `oldText` should now be
-blocked with the `VERIFY before EDIT` message.
-
-### Compatibility
-
-- pi SDK: `>= 0.79.0`
-- Node: `>= 20`
-- TUI: `>= 0.79.0`
-
-### Verified
-
-- `npm run build` succeeds
-- `npm test` 98/98 pass (count went down because of the review
-  removal; edit-guard added 5)
-- `tsc --noEmit` clean
-
----
-
-## 0.6.4 — 2025
-
-### Fixed
-
-- **`Cannot find package '@earendil-works/pi-coding-agent'`** on
-  `pi install`. `@earendil-works/pi-coding-agent` and
-  `@earendil-works/pi-tui` are runtime imports and were incorrectly
-  listed under `devDependencies`. They are now in `dependencies` and
-  pinned to `^0.79.0` so the npm tarball includes them after
-  `npm install --omit=dev` (the default used by `pi install`).
-
-### What you need to do
-
-Nothing. The next `pi install` (or upgrade) picks up 0.6.4
-automatically. If you pinned a specific version, run:
-
-```bash
-pi install @heyhuynhgiabuu/pi-diff@0.6.4
-```
-
-To verify it's working, start pi and look for the
-`@heyhuynhgiabuu/pi-diff` line in the extension list. There should be
-no `Cannot find package` error.
-
-### Compatibility
-
-- pi SDK: `>= 0.79.0` (uses the new `@earendil-works/pi-coding-agent`
-  scope; no longer works with the old `@mariozechner/pi-coding-agent`
-  scope that shipped with pi < 0.51)
-- Node: `>= 20`
-- TUI: `>= 0.79.0` (uses `@earendil-works/pi-tui`)
-
-### Verified
-
-- `npm run build` succeeds
-- `npm test` 143/143 pass
-- `tsc --noEmit` clean
-- `dist/index.js` references `@earendil-works/pi-coding-agent`
-- Fresh `npm install` produces a `node_modules/@earendil-works/`
-  with both SDK packages present
-
----
-
-## 0.6.3
-
-See `CHANGELOG.md` for the 0.6.x series history.
+Requires Pi **0.80.x** (`@earendil-works/pi-coding-agent` ^0.80.0).
