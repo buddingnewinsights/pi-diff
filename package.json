@@ -44,12 +44,11 @@
 		"@earendil-works/pi-coding-agent": "^0.84.2",
 		"@earendil-works/pi-tui": "^0.84.2",
 		"@shikijs/cli": "^4.0.2",
-		"diff": "^7.0.0",
+		"diff": "^8.0.4",
 		"xxhash-wasm": "^1.1.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.5",
-		"@types/diff": "^7.0.2",
 		"@types/node": "^24.13.3",
 		"typescript": "^5.0.0",
 		"vitest": "^4.0.18"
