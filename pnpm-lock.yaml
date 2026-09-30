@@ -23,7 +23,7 @@ importers:
         version: 2.5.1
       '@earendil-works/pi-coding-agent':
         specifier: ^0.87.0
-        version: 0.87.0
+        version: 0.87.0(ws@8.21.0)
       '@earendil-works/pi-tui':
         specifier: ^0.87.0
         version: 0.87.0
