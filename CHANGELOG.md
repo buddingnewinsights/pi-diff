@@ -4,6 +4,13 @@ All notable changes to `@heyhuynhgiabuu/pi-diff` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.2] — 2026-09-30
+
+### Changed
+
+- **Pi host SDK metadata** — declare `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` as host-provided peer dependencies, retaining `^0.87.0` development dependencies for local builds.
+- **Dependency footprint** — remove the unused direct `@earendil-works/pi-server` dependency and its install-only dependency tree.
+
 ## [0.9.1] — 2026-09-10
 
 ### Added

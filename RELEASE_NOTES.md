@@ -1,21 +1,12 @@
-# @heyhuynhgiabuu/pi-diff v0.9.1
-
-## Added
-
-- Tolerant `apply_patch` input: JSON-string payloads, a single change object, and `edits` sent as a JSON string or a single object.
+# @heyhuynhgiabuu/pi-diff v0.9.2
 
 ## Changed
 
-- `apply_patch` matching is exact first, then tolerates escaped sequences and Unicode/trailing-whitespace drift; a fuzzy match is accepted only when it is unique, and non-uniform indentation is refused instead of guessed.
-- `write`, `edit`, and `apply_patch` bodies sit directly under the tool title, with no title/body gap.
-- The `apply_patch` header resolves the theme's tool background before painting.
-
-## Fixed
-
-- Ambiguous `apply_patch` matches now report how many times `oldText` matched and ask for more context, instead of a misleading "not found".
+- Declare `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` as host-provided peer dependencies, avoiding separate runtime copies. Keep `^0.87.0` development dependencies for local builds.
+- Remove the unused direct dependency on `@earendil-works/pi-server` and its install-only dependency tree.
 
 ## Install
 
 ```bash
-pi install npm:@heyhuynhgiabuu/pi-diff@0.9.1
+pi install npm:@heyhuynhgiabuu/pi-diff@0.9.2
 ```
