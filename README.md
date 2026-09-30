@@ -274,7 +274,10 @@ npm install
 npm run typecheck   # TypeScript validation
 npm run lint        # Biome linting
 npm test            # Run tests
+npm run test:host-loading  # Pack, install without peers, and load with Pi
 ```
+
+`test:host-loading` checks user and project npm layouts in temporary directories, verifies that no Pi SDK copies are installed, and exercises all three tools through the host loader. It requires npm registry access or a populated npm cache and cleans up its installations after the run.
 
 ### Load in pi for testing
 
