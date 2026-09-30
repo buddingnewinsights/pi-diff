@@ -38,22 +38,26 @@
 		"lint": "biome check src/",
 		"lint:fix": "biome check --fix src/",
 		"test": "vitest run src --passWithNoTests",
+		"test:host-loading": "npm run build && node scripts/test-host-loading.mjs",
 		"test:watch": "vitest src --passWithNoTests"
 	},
 	"dependencies": {
-		"@earendil-works/pi-coding-agent": "^0.85.0",
-		"@earendil-works/pi-tui": "^0.85.0",
-		"@earendil-works/pi-server": "^0.85.0",
 		"@shikijs/cli": "^4.0.2",
 		"diff": "^7.0.0",
 		"xxhash-wasm": "^1.1.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.5",
+		"@earendil-works/pi-coding-agent": "^0.85.0",
+		"@earendil-works/pi-tui": "^0.85.0",
 		"@types/diff": "^7.0.2",
 		"@types/node": "^24.13.3",
 		"typescript": "^5.0.0",
 		"vitest": "^4.0.18"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*"
 	},
 	"pi": {
 		"extensions": [

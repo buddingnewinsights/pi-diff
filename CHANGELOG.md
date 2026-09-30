@@ -4,6 +4,13 @@ All notable changes to `@heyhuynhgiabuu/pi-diff` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Load Pi SDK modules through static imports and declare them as host-provided peers, including installations without physical SDK copies.
+- Remove the unused `pi-server` runtime dependency.
+
 ## [0.9.1] — 2026-09-10
 
 ### Added

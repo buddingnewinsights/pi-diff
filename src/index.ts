@@ -24,8 +24,8 @@
 import { constants, existsSync, readFileSync } from "node:fs";
 import { access as accessFile, readFile, writeFile } from "node:fs/promises";
 import { extname, relative } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { Component } from "@earendil-works/pi-tui";
+import { createEditTool, createWriteTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { type Component, Text as TextComponent } from "@earendil-works/pi-tui";
 import { codeToANSI } from "@shikijs/cli";
 import * as Diff from "diff";
 import {
@@ -1373,23 +1373,6 @@ export default async function diffRendererExtension(pi: ExtensionAPI): Promise<v
 	// Resolve hunk separator style from env var
 	resolveSepStyle();
 
-	let createWriteTool: any, createEditTool: any, getMarkdownTheme: any, TextComponent: any, MarkdownComponent: any;
-	try {
-		const sdk = await import("@earendil-works/pi-coding-agent");
-		const tui = await import("@earendil-works/pi-tui");
-		createWriteTool = sdk.createWriteTool;
-		createEditTool = sdk.createEditTool;
-		getMarkdownTheme = sdk.getMarkdownTheme;
-		TextComponent = tui.Text;
-		MarkdownComponent = tui.Markdown;
-	} catch (error) {
-		console.error(
-			`[pi-diff] failed to load Pi SDK dependencies: ${error instanceof Error ? error.message : String(error)}`,
-		);
-		return;
-	}
-	if (!createWriteTool || !createEditTool || !TextComponent) return;
-
 	const editHeaderStatsByCallId = new Map<
 		string,
 		{ edits: number; diffLines: number; added: number; removed: number }
@@ -1821,7 +1804,7 @@ export default async function diffRendererExtension(pi: ExtensionAPI): Promise<v
 	// write
 	// =======================================================================
 
-	const origWrite = createWriteTool(cwd);
+	const origWrite: any = createWriteTool(cwd);
 
 	registerToolIfEnabled("write", {
 		...origWrite,
@@ -1977,7 +1960,7 @@ export default async function diffRendererExtension(pi: ExtensionAPI): Promise<v
 	// edit
 	// =======================================================================
 
-	const origEdit = createEditTool(cwd);
+	const origEdit: any = createEditTool(cwd);
 
 	function getEditOperations(input: any): Array<{ oldText: string; newText: string }> {
 		if (Array.isArray(input?.edits)) {
@@ -2063,7 +2046,7 @@ export default async function diffRendererExtension(pi: ExtensionAPI): Promise<v
 		async execute(tid: string, params: any, sig: any, upd: any, ctx: any) {
 			const fp = params.path ?? params.file_path ?? "";
 			const operations = getEditOperations(params);
-			const guardedEdit = createEditTool(cwd, {
+			const guardedEdit: any = createEditTool(cwd, {
 				operations: {
 					access: (filePath: string) => accessFile(filePath, constants.R_OK | constants.W_OK),
 					readFile: async (filePath: string) => {
