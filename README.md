@@ -18,8 +18,8 @@ A [pi](https://pi.dev) extension that replaces the default `write` and `edit` to
 ## Features
 
 - **Syntax-highlighted diffs** — full Shiki grammar highlighting (190+ languages) composited with diff background colors
-- **Split view** — side-by-side comparison for `edit` tool, auto-falls back to unified on narrow terminals
-- **Unified view** — stacked single-column layout for `write` tool overwrites
+- **Split view** — side-by-side comparison for `edit` and `write` overwrite previews; falls back to unified on narrow terminals, unbalanced changes, or wrap-heavy hunks
+- **Unified view** — stacked single-column layout; the fallback when split view's thresholds are not met
 - **Word-level emphasis** — changed characters get brighter backgrounds so you see exactly what changed
 - **New file preview** — syntax-highlighted preview when creating files
 - **Adaptive layout** — auto-detects terminal width; wraps intelligently on wide terminals, truncates on narrow ones
@@ -74,8 +74,10 @@ New content ──┘                                          │
 
 | View        | Used by      | Description                                                                                                                                                       |
 | ----------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Split**   | `edit` tool  | Side-by-side with old on left, new on right. Diagonal stripes fill empty slots. Auto-falls back to unified when terminal < 150 cols or > 20% of lines would wrap. |
-| **Unified** | `write` tool | Single column with `+`/`-` gutter. Compact, works at any terminal width.                                                                                          |
+| **Split**   | `edit`, `write` (overwrites), `apply_patch` updates | Side-by-side with old on left, new on right. Diagonal stripes fill empty slots. Used only when the renderer width is at least 80 columns (`DIFF_SPLIT_MIN_WIDTH`), each code column is at least 24 columns (`DIFF_SPLIT_MIN_CODE_WIDTH`), the preview has both removed and added lines within a 2× ratio, fewer than 10 lines would wrap, and less than 35% of lines would wrap. Otherwise falls back to unified. |
+| **Unified** | Fallback for the same previews | Single column with `+`/`-` gutter. Compact, works at any terminal width. |
+
+The renderer width is the available tool area after Pi applies output padding (`0` or `1` on each side). In a full-width tool area, padding 1 leaves an 82-column terminal with 80 renderer columns; narrower panes can reduce this further. Meeting the width threshold alone does not guarantee split: the other checks above still apply. New-file previews use their own view and are not split.
 
 Both views show:
 
@@ -195,8 +197,10 @@ Override any diff color with hex `#RRGGBB` format:
 
 | Variable                    | Default | Description                                 |
 | --------------------------- | ------- | ------------------------------------------- |
-| `DIFF_SPLIT_MIN_WIDTH`      | `150`   | Minimum terminal columns to use split view  |
-| `DIFF_SPLIT_MIN_CODE_WIDTH` | `60`    | Minimum code columns per side in split view |
+| `DIFF_SPLIT_MIN_WIDTH`      | `80`    | Minimum renderer width (terminal columns minus 2 × output padding) to use split view |
+| `DIFF_SPLIT_MIN_CODE_WIDTH` | `24`    | Minimum code columns per side in split view |
+
+`splitMinWidth` and `splitMinCodeWidth` in `pi-diff.json` are not read by pi-diff yet; use the environment variables above. See [CONFIG.md](CONFIG.md).
 
 ### Example `.envrc`
 
@@ -208,8 +212,8 @@ export DIFF_THEME="catppuccin-mocha"
 export DIFF_BG_ADD="#1a3a25"
 export DIFF_BG_ADD_HL="#2d6040"
 
-# Allow split view on narrower terminals
-export DIFF_SPLIT_MIN_WIDTH=120
+# Allow split view on narrower terminals (default 80)
+export DIFF_SPLIT_MIN_WIDTH=60
 ```
 
 ## Architecture

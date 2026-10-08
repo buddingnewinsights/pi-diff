@@ -4,12 +4,16 @@ All notable changes to `@heyhuynhgiabuu/pi-diff` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.9.3] — 2026-10-08
 
 ### Changed
 
 - **Pi SDK development baseline** — pin `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` to `1.1.0` and synchronize both lockfiles. Host peer ranges are unchanged.
 - **Shell padding regression coverage** — check `write`, `edit`, and `apply_patch` titles and fully rendered `write`/`edit` diffs with host padding 0, 1, and 2, including width bounds and double-padding protection. Padding 2 is an extra bounds check; Pi's setting supports 0 and 1. Tests simulate the default host shell, not a live TUI.
+
+### Fixed
+
+- **Split-view documentation** — README, CONFIG.md, the example file, and schema descriptions now match runtime behavior: the split threshold is `DIFF_SPLIT_MIN_WIDTH` (default 80 renderer columns, not 150), the code-column minimum is `DIFF_SPLIT_MIN_CODE_WIDTH` (default 24, not 60), `write` overwrites can use split view, and wrap-heavy previews fall back at 35% or 10 lines. The `splitMinWidth` and `splitMinCodeWidth` keys in `pi-diff.json` are not read; use the environment variables. No runtime behavior change.
 
 ## [0.9.2] — 2026-09-30
 

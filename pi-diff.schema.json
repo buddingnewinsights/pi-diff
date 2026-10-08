@@ -144,13 +144,13 @@
 			"additionalProperties": false
 		},
 		"splitMinWidth": {
-			"description": "Minimum terminal width (in columns) to prefer split view over unified.",
+			"description": "NOT READ by pi-diff currently (no runtime effect). The split view width threshold is set with the DIFF_SPLIT_MIN_WIDTH environment variable (runtime default 80 renderer columns).",
 			"type": "integer",
 			"minimum": 80,
 			"default": 150
 		},
 		"splitMinCodeWidth": {
-			"description": "Minimum code-column width per side in split view before falling back to unified.",
+			"description": "NOT READ by pi-diff currently (no runtime effect). Set the DIFF_SPLIT_MIN_CODE_WIDTH environment variable instead (runtime default 24 code columns per side).",
 			"type": "integer",
 			"minimum": 40,
 			"default": 60

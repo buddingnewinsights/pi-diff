@@ -59,11 +59,22 @@ For example, to remove the custom patch tool:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `splitMinWidth` | `integer` | `150` | Min terminal cols for split view |
-| `splitMinCodeWidth` | `integer` | `60` | Min code cols per side in split |
+| `splitMinWidth` | `integer` | — | **Not read; ignored.** Use env `DIFF_SPLIT_MIN_WIDTH` (runtime default `80` renderer columns). |
+| `splitMinCodeWidth` | `integer` | — | **Not read; ignored.** Use env `DIFF_SPLIT_MIN_CODE_WIDTH` (runtime default `24`). |
 | `maxPreviewLines` | `integer` | `60` | Max lines in edit preview |
 | `maxRenderLines` | `integer` | `150` | Max lines in write output |
 | `wordDiffMinSimilarity` | `number` | `0.15` | Similarity threshold for word-diff (0–1) |
+
+#### Split view thresholds (environment variables)
+
+Split view is used for a preview only when all of these hold:
+
+- **Renderer width** ≥ `DIFF_SPLIT_MIN_WIDTH` (default `80`). This is the available tool area after Pi's output padding (`0` or `1` per side). A full-width tool area with padding 1 needs at least 82 terminal columns to meet this check; narrower panes can reduce the available width.
+- **Code column** per side ≥ `DIFF_SPLIT_MIN_CODE_WIDTH` (default `24`).
+- Both removed and added lines are present in the visible rows, and neither side has more than twice as many lines as the other.
+- Fewer than 10 visible content lines, and less than 35% of them, are wider than the code column.
+
+Otherwise the preview uses the unified view. The wrap limits are fixed in the renderer (`src/review/hunk-preview.ts`) and are not configurable.
 
 ---
 
@@ -216,7 +227,7 @@ DIFF_BG_ADD="#1a5020" DIFF_BG_DEL="#501a1a" pi
 
 ## Full Example
 
-The file `pi-diff.example.json` contains all options with their defaults:
+The file `pi-diff.example.json` contains all options with their defaults. Exception: `splitMinWidth` and `splitMinCodeWidth` are not read by pi-diff yet; see [Layout](#layout-advanced) above.
 
 ```json
 {

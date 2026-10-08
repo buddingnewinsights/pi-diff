@@ -5,7 +5,7 @@
   "_readme2": "  pi-diff Configuration                                         ",
   "_readme3": "  Copy this file to your project root as pi-diff.json.         ",
   "_readme4": "  All fields are optional — defaults apply for omitted values. ",
-  "_readme5": "                                                                ",
+  "_readme5": "  splitMinWidth/splitMinCodeWidth are ignored; use DIFF_SPLIT_MIN_WIDTH/DIFF_SPLIT_MIN_CODE_WIDTH (defaults 80/24). ",
   "_readme6": "  Priority (highest wins):                                     ",
   "_readme7": "    1. Environment variable (PI_DIFF_*)                        ",
   "_readme8": "    2. Project-level: ./pi-diff.json                           ",
