@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { Box, Spacer, stripTerminalSequences } from "@earendil-works/pi-tui";
+import { Box, Spacer, stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, it, vi } from "vitest";
 import diffRendererExtension, { __testing } from "./index.js";
 
@@ -52,10 +52,17 @@ async function getRenderedTools(): Promise<Map<string, any>> {
 	return tools;
 }
 
-function renderDefaultToolShell(...components: Renderable[]): string[] {
-	const box = new Box(1, 1);
+const SHELL_WIDTH = 80;
+
+// Mirrors the host's default shell: a Spacer, then a Box whose paddingX is the outputPad setting (0 or 1 in Pi).
+function renderToolShell(outputPad: number, ...components: Renderable[]): string[] {
+	const box = new Box(outputPad, 1);
 	for (const component of components) box.addChild(component as any);
-	return [...new Spacer(1).render(80), ...box.render(80)].map(stripTerminalSequences);
+	return [...new Spacer(1).render(SHELL_WIDTH), ...box.render(SHELL_WIDTH)].map(stripTerminalSequences);
+}
+
+function renderDefaultToolShell(...components: Renderable[]): string[] {
+	return renderToolShell(1, ...components);
 }
 
 function leadingSpaces(line: string): number {
@@ -248,5 +255,153 @@ describe("write/edit/apply_patch shell spacing", () => {
 		const errorLines = renderDefaultToolShell(error);
 		assert.equal(leadingSpaces(lineContaining(errorLines, "← apply_patch").line), 1);
 		assert.equal(leadingSpaces(lineContaining(errorLines, "failure").line), 1);
+	});
+});
+
+// Diff previews render asynchronously: the first pass shows a placeholder and the real diff lands on a later render.
+async function settleShell(render: () => string[], settled: Promise<void>): Promise<string[]> {
+	render();
+	await settled;
+	const lines = render();
+	assert.equal(
+		lines.some((line) => line.includes("rendering diff")),
+		false,
+		"diff preview should settle",
+	);
+	return lines;
+}
+
+function renderDiffTool(
+	tools: Map<string, any>,
+	name: string,
+	diff: ReturnType<typeof __testing.parseDiff>,
+	id: string,
+): { call: Renderable; result: Renderable; settled: Promise<void> } {
+	let invalidate = () => {};
+	const settled = new Promise<void>((resolve) => {
+		invalidate = resolve;
+	});
+	const args =
+		name === "write"
+			? { path: "package.json", content: "next" }
+			: { path: "package.json", edits: [{ oldText: "old", newText: "new" }] };
+	const tool = tools.get(name);
+	const call = tool.renderCall(args, renderTheme, {
+		argsComplete: true,
+		lastComponent: undefined,
+		state: {},
+		toolCallId: `${id}-call`,
+	});
+	const result = tool.renderResult(
+		{
+			content: [{ type: "text", text: "ok" }],
+			details: { _type: name === "write" ? "diff" : "editInfo", diff, language: undefined },
+		},
+		{ expanded: true, isPartial: false },
+		renderTheme,
+		{ args, state: {}, lastComponent: undefined, invalidate, isError: false },
+	);
+	return { call, result, settled };
+}
+
+describe.each([0, 1, 2])("tool shell with outputPad %i", (outputPad) => {
+	it("pads each title exactly once with outputPad", async () => {
+		const tools = await getRenderedTools();
+		// apply_patch hides its own title once args are complete (the result header takes over), so check it while streaming.
+		const cases = [
+			{ name: "write", args: { path: "package.json", content: "next" }, argsComplete: true },
+			{ name: "edit", args: { path: "package.json", edits: [{ oldText: "old", newText: "new" }] }, argsComplete: true },
+			{
+				name: "apply_patch",
+				args: { changes: [{ path: "package.json", action: "update", oldText: "old", newText: "new" }] },
+				argsComplete: false,
+			},
+		];
+		for (const { name, args, argsComplete } of cases) {
+			const call = tools.get(name).renderCall(args, renderTheme, {
+				argsComplete,
+				lastComponent: undefined,
+				state: {},
+				toolCallId: `${name}-title-pad-${outputPad}`,
+			});
+			const lines = renderToolShell(outputPad, call);
+			const title = lineContaining(lines, `← ${name}`);
+			assert.equal(title.index, 2, `${name} title should follow the host spacer and top pad`);
+			assert.equal(leadingSpaces(title.line), outputPad, `${name} title should have exactly outputPad leading spaces`);
+		}
+	});
+
+	it("pads diff bodies by exactly outputPad on top of the diff's own gutter", async () => {
+		const tools = await getRenderedTools();
+		const diff = __testing.parseDiff("old();\n", "new();\n");
+		for (const name of ["write", "edit"]) {
+			const { call, result, settled } = renderDiffTool(tools, name, diff, `${name}-body-pad-${outputPad}`);
+			// The first render is the placeholder, which carries only the body pad (no diff gutter), so it isolates that pad.
+			const placeholder = lineContaining(renderToolShell(outputPad, call, result), "rendering diff");
+			assert.equal(
+				leadingSpaces(placeholder.line),
+				outputPad,
+				`${name} placeholder body should have exactly outputPad leading spaces`,
+			);
+			const lines = await settleShell(() => renderToolShell(outputPad, call, result), settled);
+			const componentLines = result.render(SHELL_WIDTH - outputPad * 2).map(stripTerminalSequences);
+			assert.ok(
+				componentLines.some((line) => line.includes("new();")),
+				`${name} body should be the rendered diff, not a placeholder`,
+			);
+
+			const titleIndex = lineContaining(lines, `← ${name}`).index;
+			const body = lines.slice(titleIndex + 1, titleIndex + 1 + componentLines.length);
+			assert.equal(body.length, componentLines.length, `${name} body should sit directly under the title`);
+			componentLines.forEach((componentLine, row) => {
+				assert.equal(
+					body[row].slice(0, outputPad),
+					" ".repeat(outputPad),
+					`${name} body row ${row} should start with exactly outputPad spaces`,
+				);
+				assert.equal(
+					body[row].slice(outputPad).trimEnd(),
+					componentLine.trimEnd(),
+					`${name} body row ${row} should add no padding beyond outputPad`,
+				);
+			});
+
+			const trailing = lines.slice(titleIndex + 1 + componentLines.length);
+			assert.deepEqual(
+				trailing.map((line) => line.trim()),
+				[""],
+				`${name} diff should have one trailing shell pad`,
+			);
+		}
+	});
+
+	it("keeps shell lines inside the render width and truncates long diff rows to the inset width", async () => {
+		const tools = await getRenderedTools();
+		const long = `const value = "${"x".repeat(150)}";`;
+		const diff = __testing.parseDiff(`old();\n${long}\n`, `new();\n${long.replace("x", "y")}\n`);
+		for (const name of ["write", "edit"]) {
+			const { call, result, settled } = renderDiffTool(tools, name, diff, `${name}-width-pad-${outputPad}`);
+			const lines = await settleShell(() => renderToolShell(outputPad, call, result), settled);
+			// Two removed and two added lines, one unified row each; a wrapped row would add shell rows beyond four.
+			const titleIndex = lineContaining(lines, `← ${name}`).index;
+			const bodyRows = lines.slice(titleIndex + 1, lines.length - 1); // the last line is the Box's bottom pad
+			assert.equal(bodyRows.length, 4, `${name} long diff rows should be truncated to one shell row each, not wrapped`);
+			for (const line of lines) {
+				assert.ok(
+					visibleWidth(line) <= SHELL_WIDTH,
+					`${name} line should not exceed ${SHELL_WIDTH} columns: ${JSON.stringify(line)}`,
+				);
+				assert.ok(
+					visibleWidth(line.trimEnd()) <= SHELL_WIDTH - outputPad,
+					`${name} line should keep a ${outputPad}-column right pad: ${JSON.stringify(line)}`,
+				);
+			}
+			const truncated = lineContaining(lines, "›");
+			assert.equal(
+				visibleWidth(truncated.line.trimEnd()),
+				SHELL_WIDTH - outputPad,
+				`${name} long diff row should fill exactly the inset width`,
+			);
+		}
 	});
 });

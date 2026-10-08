@@ -4,6 +4,13 @@ All notable changes to `@heyhuynhgiabuu/pi-diff` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Pi SDK development baseline** — pin `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` to `1.1.0` and synchronize both lockfiles. Host peer ranges are unchanged.
+- **Shell padding regression coverage** — check `write`, `edit`, and `apply_patch` titles and fully rendered `write`/`edit` diffs with host padding 0, 1, and 2, including width bounds and double-padding protection. Padding 2 is an extra bounds check; Pi's setting supports 0 and 1. Tests simulate the default host shell, not a live TUI.
+
 ## [0.9.2] — 2026-09-30
 
 ### Changed
